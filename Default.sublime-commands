@@ -1,0 +1,12 @@
+[
+    {
+        "caption": "Fetch Torrent Info & Download'em",
+        "command": "bookee_fetch",
+        "args":{"download":true}
+    },
+    {
+        "caption": "Fetch Torrent Info Only",
+        "command": "bookee_fetch",
+        "args":{"download":false}
+    }
+]

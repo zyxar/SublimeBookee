@@ -1,0 +1,25 @@
+[
+    {
+        "caption": "Tools",
+        "id": "tools",
+        "children":
+        [
+            {
+                "caption": "Bookee",
+                "children":
+                [
+                    {
+                        "caption": "Fetch Torrent Info & Download'em",
+                        "command": "bookee_fetch",
+                        "args":{"download":true}
+                    },
+                    {
+                        "caption": "Fetch Torrent Info Only",
+                        "command": "bookee_fetch",
+                        "args":{"download":false}
+                    }
+                ]
+            }
+        ]
+    }
+]
