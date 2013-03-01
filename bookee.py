@@ -6,20 +6,22 @@ __author__ = "Markus Chou (chou.marcus@gmail.com)"
 __copyright__ = "(c) 2013 Markus Chou"
 __license__ = "MIT License"
 
-from sgmllib import SGMLParser
+from HTMLParser import HTMLParser
 from urllib import quote
 from urlparse import urljoin
+from urllib2 import urlopen, Request, HTTPError
 
 import sublime, sublime_plugin
 import subprocess
-import urllib2, re
+import re
+import os
 
 site_url = "http://www.ebookshare.net"
 _tracker_ = "magnet:?xt=urn:btih:%s&dn=%s&tr=udp%%3A%%2F%%2Ftracker.publicbt.com%%3A80&tr=udp%%3A%%2F%%2Ftracker.openbittorrent.com%%3A80&tr=udp%%3A%%2F%%2Ftracker.ccc.de%%3A80"
 
-class PostParser(SGMLParser):
+class PostParser(HTMLParser):
     def __init__(self):
-        SGMLParser.__init__(self)
+        HTMLParser.__init__(self)
         self.mark = False
         self.store = []
         self.is_title = False
@@ -28,33 +30,44 @@ class PostParser(SGMLParser):
         self.url = ""
         self.title = ""
         self.meta = ""
+
     def parse(self, content):
         self.feed(content)
+
     def read(self):
         r = self.store
         self.store = []
         return r
-    def start_div(self, attrs):
-        if attrs[0][0] == "class" and attrs[0][1] == "post":
-            self.mark = True
-    def end_div(self):
-        self.mark = False
-    def start_h2(self, attrs):
-        if len(attrs) > 0 and len(attrs[0]) == 2 and attrs[0][0] == "class" and attrs[0][1] == "posttitle":
-            self.is_title = True
-    def end_h2(self):
-        self.is_title = False
-    def start_p(self, attrs):
-        if attrs[0][0] == "class" and attrs[0][1] == "postmeta":
-            self.is_meta = True
-    def end_p(self):
-        self.is_meta = False
-    def start_a(self, attrs):
-        if self.is_title:
-            self.is_href = True
-            self.url = attrs[0][1]
-    def end_a(self):
-        self.is_href = False   
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'div':
+            if attrs[0][0] == "class" and attrs[0][1] == "post":
+                self.mark = True
+        elif tag == 'h2':
+            if len(attrs) > 0 and len(attrs[0]) == 2 and attrs[0][0] == "class" and attrs[0][1] == "posttitle":
+                self.is_title = True
+        elif tag == 'p':
+            if attrs[0][0] == "class" and attrs[0][1] == "postmeta":
+                self.is_meta = True
+        elif tag == 'a':
+            if self.is_title:
+                self.is_href = True
+                self.url = attrs[0][1]
+        else:
+            pass
+
+    def handle_endtag(self, tag):
+        if tag == 'div':
+            self.mark = False
+        elif tag == 'h2':
+            self.is_title = False
+        elif tag == 'p':
+            self.is_meta = False
+        elif tag == 'a':
+            self.is_href = False
+        else:
+            pass
+  
     def handle_data(self, text):
         if self.mark:
             if self.is_title:
@@ -79,7 +92,7 @@ class PostInfo(dict):
     
     def feed(self):
         try:
-            cont = urllib2.urlopen(urllib2.Request(self['link'])).read()
+            cont = urlopen(Request(self['link'])).read()
             try:
                 self['torrent_url'] = re.compile(r'/download.*id=[0-9]+').search(cont).group()
             except:
@@ -88,7 +101,7 @@ class PostInfo(dict):
                 self['info_hash'] = re.compile(r'\w{40,40}').search(cont).group()
             except:
                 self['info_hash'] = ''
-        except urllib2.HTTPError:
+        except HTTPError:
             self['torrent_url'] = ''
             self['info_hash'] = ''
 
@@ -99,12 +112,13 @@ class PostInfo(dict):
 
 def readPage(n=1):
     try:
-        fd = urllib2.urlopen(site_url+'/all-%d.html'%n, timeout=5)
+        fd = urlopen(site_url+'/all-%d.html'%n, timeout=5)
         return fd.read()
     except:
         return None
     finally:
-        fd.close()
+        # fd.close()
+        pass
 
 def readOneDay():
     date = None
@@ -127,6 +141,16 @@ def readOneDay():
     sublime.status_message('Total: %d posts' % len(rr))
     return rr
 
+def do_proxy():
+    if os.environ.has_key('http_proxy') and os.environ['http_proxy'] != '':
+        return
+    http_proxy = sublime.load_settings('Bookee.sublime-settings').get('http_proxy')
+    if http_proxy is not None:
+        os.environ['http_proxy'] = http_proxy
+        # sublime.status_message('set http_proxy to \'%s\'' % http_proxy)
+    else:
+        pass
+
 class BookeeFetch(sublime_plugin.TextCommand):
     """command: bookee_fetch"""
 
@@ -137,9 +161,10 @@ class BookeeFetch(sublime_plugin.TextCommand):
         return self.is_enable()
 
     def run(self, edit, download=False):
+        do_proxy()
         posts = readOneDay()
         downs = [urljoin(site_url, post['torrent_url']) for post in posts]
-        self.view.erase(edit, sublime.Region(0 ,self.view.size()))
+        self.view.erase(edit, sublime.Region(0, self.view.size()))
         self.view.insert(edit, 0, '\n'.join(['%s\tbt://%s' % (post['pubDate'], post['info_hash']) for post in posts]))
         self.view.insert(edit, self.view.size(), '\n\n')
         self.view.insert(edit, self.view.size(), '\n'.join(downs))
