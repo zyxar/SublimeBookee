@@ -145,11 +145,11 @@ def do_proxy():
     if os.environ.has_key('http_proxy') and os.environ['http_proxy'] != '':
         return
     http_proxy = sublime.load_settings('Bookee.sublime-settings').get('http_proxy')
-    if http_proxy is not None:
+    if http_proxy is None or http_proxy == '':
+        return
+    else:
         os.environ['http_proxy'] = http_proxy
         # sublime.status_message('set http_proxy to \'%s\'' % http_proxy)
-    else:
-        pass
 
 class BookeeFetch(sublime_plugin.TextCommand):
     """command: bookee_fetch"""
