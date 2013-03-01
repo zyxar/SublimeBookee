@@ -6,10 +6,11 @@ __author__ = "Markus Chou (chou.marcus@gmail.com)"
 __copyright__ = "(c) 2013 Markus Chou"
 __license__ = "MIT License"
 
-from HTMLParser import HTMLParser
-from urllib import quote
-from urlparse import urljoin
-from urllib2 import urlopen, Request, HTTPError
+from html.parser import HTMLParser
+from urllib.parse import quote
+from urllib.parse import urljoin
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError
 
 import sublime, sublime_plugin
 import subprocess
@@ -32,7 +33,7 @@ class PostParser(HTMLParser):
         self.meta = ""
 
     def parse(self, content):
-        self.feed(content)
+        self.feed(content.decode('utf-8'))
 
     def read(self):
         r = self.store
@@ -92,7 +93,7 @@ class PostInfo(dict):
     
     def feed(self):
         try:
-            cont = urlopen(Request(self['link'])).read()
+            cont = urlopen(Request(self['link'])).read().decode('utf-8')
             try:
                 self['torrent_url'] = re.compile(r'/download.*id=[0-9]+').search(cont).group()
             except:
@@ -142,14 +143,14 @@ def readOneDay():
     return rr
 
 def do_proxy():
-    if os.environ.has_key('http_proxy') and os.environ['http_proxy'] != '':
+    if 'http_proxy' in os.environ and os.environ['http_proxy'] != '':
         return
     http_proxy = sublime.load_settings('Bookee.sublime-settings').get('http_proxy')
-    if http_proxy is not None:
+    if http_proxy is None or http_proxy == '':
+        return
+    else:
         os.environ['http_proxy'] = http_proxy
         # sublime.status_message('set http_proxy to \'%s\'' % http_proxy)
-    else:
-        pass
 
 class BookeeFetch(sublime_plugin.TextCommand):
     """command: bookee_fetch"""
