@@ -11,6 +11,7 @@ from urllib.parse import quote
 from urllib.parse import urljoin
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError
+from threading import Thread
 
 import sublime, sublime_plugin
 import subprocess
@@ -121,36 +122,35 @@ def readPage(n=1):
         # fd.close()
         pass
 
-def readOneDay():
-    date = None
+def readDays(days=1):
     n = 1
+    done_date = []
     rr = []
     pp = PostParser()
-    while date is None or cont[-1]['pubDate'] == date:
+    while len(done_date) <= int(days):#date is None or cont[-1]['pubDate'] == date:
         page = readPage(n)
         if page is not None:
             pp.parse(page)
             cont = pp.read()
-            if date is None:
-                date = cont[0]['pubDate']
             for post in cont:
-                if post['pubDate'] == date:
+                date = post['pubDate']
+                if date not in done_date:
+                    done_date.append(date)
+                if len(done_date) <= int(days):
                     post.feed()
                     rr.append(post)
         print('Page %d done.' % n)
         n += 1
-    sublime.status_message('Total: %d posts' % len(rr))
+    print('Total: %d posts' % len(rr))
     return rr
 
 def do_proxy():
     if 'http_proxy' in os.environ and os.environ['http_proxy'] != '':
         return
     http_proxy = sublime.load_settings('Bookee.sublime-settings').get('http_proxy')
-    if http_proxy is None or http_proxy == '':
-        return
-    else:
+    if http_proxy is not None and http_proxy != '':
         os.environ['http_proxy'] = http_proxy
-        # sublime.status_message('set http_proxy to \'%s\'' % http_proxy)
+        print('set http_proxy to \'%s\'' % http_proxy)
 
 class BookeeFetch(sublime_plugin.TextCommand):
     """command: bookee_fetch"""
@@ -162,17 +162,32 @@ class BookeeFetch(sublime_plugin.TextCommand):
         return self.is_enable()
 
     def run(self, edit, download=False):
-        do_proxy()
-        posts = readOneDay()
-        downs = [urljoin(site_url, post['torrent_url']) for post in posts]
-        self.view.erase(edit, sublime.Region(0, self.view.size()))
-        self.view.insert(edit, 0, '\n'.join(['%s\tbt://%s' % (post['pubDate'], post['info_hash']) for post in posts]))
-        self.view.insert(edit, self.view.size(), '\n\n')
-        self.view.insert(edit, self.view.size(), '\n'.join(downs))
-        if download:
-            for url in downs:
-                try:
-                    subprocess.call(['curl', '-OJ', url])
-                except Exception as e:
-                    sublime.status_message('Unable to download %s.\n%s' % (url, repr(e)))
+
+        def do_thread(args):
+            days = args[0]
+            download_on = args[1]
+            do_proxy()
+            posts = readDays(days)
+            downs = [urljoin(site_url, post['torrent_url']) for post in posts]
+            # self.view.erase(edit, sublime.Region(0, self.view.size()))
+            # selv.view.insert(edit, 0, '\n'.join(['%s\tbt://%s' % (post['pubDate'], post['info_hash']) for post in posts]))
+            # self.view.insert(edit, self.view.size(), '\n\n')
+            # self.view.insert(edit, self.view.size(), '\n'.join(downs))
+            print('\n'.join(['%s\tbt://%s' % (post['pubDate'], post['info_hash']) for post in posts]))
+            print('\n')
+            print('\n'.join(downs))
+            if download_on:
+                os.chdir(os.path.expanduser('~/Desktop'))
+                for url in downs:
+                    try:
+                        subprocess.call(['curl', '-OJ', url])
+                    except Exception as e:
+                        print('Unable to download %s.\n%s' % (url, repr(e)))
+                print('Download procedure ends.')
+        
+        def issue(days):
+            t = Thread(target=do_thread, args=((days, download),))
+            t.start()
+            
+        self.view.window().show_input_panel('How Many Days?', '1', issue, None, None)
         
