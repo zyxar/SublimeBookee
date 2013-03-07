@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__version__ = "0.1.2" # 2 for st2; 3 for st3
+__version__ = "0.1.3" # 2 for st2; 3 for st3
 __author__ = "Markus Chou (chou.marcus@gmail.com)"
 __copyright__ = "(c) 2013 Markus Chou"
 __license__ = "MIT License"
@@ -12,6 +12,7 @@ from urllib.parse import urljoin
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError
 from threading import Thread
+from os.path import exists
 
 import sublime, sublime_plugin
 import subprocess
@@ -112,6 +113,23 @@ class PostInfo(dict):
             return ''
         return  _tracker_ % (self['info_hash'], quote(self['title']))
 
+def retrieve(url):
+    socket = urlopen(url)
+    pattern = re.compile(r'filename.*=\"([^\"]*)\"')
+    try:
+        filename = pattern.findall(socket.info().get('content-disposition'))[0]
+    except:
+        filename = url.split('/')[-1]
+    if exists(filename):
+        print("File %s already exists." % filename)
+    else:
+        print("Downloading: %s." % filename)
+        ff = open(filename, 'wb')
+        ff.write(socket.read())
+        ff.close()
+        print("%s downloaded." % filename)
+    socket.close()
+
 def readPage(n=1):
     try:
         fd = urlopen(site_url+'/all-%d.html'%n, timeout=5)
@@ -136,9 +154,10 @@ def readDays(days=1):
                 date = post['pubDate']
                 if date not in done_date:
                     done_date.append(date)
-                if len(done_date) <= int(days):
-                    post.feed()
-                    rr.append(post)
+                if len(done_date) > int(days):
+                    break
+                post.feed()
+                rr.append(post)
         print('Page %d done.' % n)
         n += 1
     print('Total: %d posts' % len(rr))
@@ -156,7 +175,7 @@ class BookeeFetch(sublime_plugin.TextCommand):
     """command: bookee_fetch"""
 
     def is_enable(self):
-        return self.view.file_name() is None and self.view.is_read_only() == False
+        return True #self.view.file_name() is None and self.view.is_read_only() == False
 
     def is_visible(self):
         return self.is_enable()
@@ -180,7 +199,8 @@ class BookeeFetch(sublime_plugin.TextCommand):
                 os.chdir(os.path.expanduser('~/Desktop'))
                 for url in downs:
                     try:
-                        subprocess.call(['curl', '-OJ', url])
+                        # subprocess.call(['curl', '-OJ', url])
+                        retrieve(url)
                     except Exception as e:
                         print('Unable to download %s.\n%s' % (url, repr(e)))
                 print('Download procedure ends.')
